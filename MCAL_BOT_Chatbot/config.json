@@ -1,0 +1,10 @@
+{
+    "mysql_server_address" :   "http://172.29.145.178:1234",
+    "document_server_address": "http://127.0.0.1:2234/",
+    "model_server_address": "https://267b-35-239-159-92.ngrok-free.app",
+    "path_to_database" : "../MCAL_BOT_Original_OK_BK.db",
+    "cookie_expire_time_second": 60,
+    "max_number_chat": 15,
+    "max_number_chat_file_chat_mode": 15,
+    "response_timeout" : 1800
+}

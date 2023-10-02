@@ -1,0 +1,6 @@
+venv/
+__pycache__/
+*.cpython-38.pyc
+*.bak
+# Ignore Python bytecode files
+*.pyc

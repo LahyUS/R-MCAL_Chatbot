@@ -1,0 +1,6 @@
+PyPDF2
+pdf2docx
+pdf2image
+aspose.words
+bs4
+tqdm

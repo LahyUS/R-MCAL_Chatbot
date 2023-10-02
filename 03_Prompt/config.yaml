@@ -1,0 +1,36 @@
+# environment: 'colab'
+# root_local: '/home/banvien/PROJECT/Work/Chatbot/'
+# root_colab: '/content/drive/MyDrive/Chatbot/'
+
+# need_decode: True
+# key_path: 'final_data/encryption_key.key'
+# data: 'final_data/v4_encrypted/'
+# embedding_model: 'model/all-mpnet-base-v2-table'
+# LLM_model: 'model/gpt4-x-vicuna-13B-GPTQ'
+# sym_spell_dict: 'model/sym_spell.pkl'
+# correct_spelling: True
+# max_token: 1500
+# retriever: 'TFIDF'
+# threshold: 0.0
+# number_of_query: 20
+# link_number: 3
+# debug: True
+
+environment: 'local'
+root_local: 'D:/Training/AI_for_MCAL/source_code/Knowledge_Transfer/MCAL_BOT_Resources/'
+root_colab: ''
+
+need_decode: True
+key_path: 'final_data/encryption_key.key'
+data: 'final_data/v4_encrypted/'
+embedding_model: 'model/all-mpnet-base-v2-table'
+LLM_model: 'model/gpt4-x-vicuna-13B-GPTQ'
+sym_spell_dict: 'model/sym_spell_v2.pkl'
+correct_spelling: False
+max_token: 4000
+retriever: 'TFIDF'
+threshold: 0.2
+number_of_query: 10
+link_number: 3
+debug: True
+

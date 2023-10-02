@@ -1,0 +1,62 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "03_Prompt - main.py",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "python": "${workspaceFolder}\\venv\\Scripts\\python.exe",
+            "env": {},
+            "cwd": "${workspaceFolder}\\03_Prompt",
+            "stopOnEntry": false,
+            "debugOptions": [],
+            "externalConsole": false,
+            "justMyCode": true,
+            "exceptionHandling": {
+                "autogenBreakpoints": true,
+                "alwaysStopOnException": false,
+                "showBaseType": true
+            },
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "MCAL_BOT_Chatbot - main.py",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "python": "${workspaceFolder}\\venv\\Scripts\\python.exe",
+            "env": {},
+            "cwd": "${workspaceFolder}\\MCAL_BOT_Chatbot\\WebChat",
+            "stopOnEntry": false,
+            "debugOptions": [],
+            "externalConsole": false,
+            "justMyCode": true,
+            "exceptionHandling": {
+                "autogenBreakpoints": true,
+                "alwaysStopOnException": false,
+                "showBaseType": true
+            },
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Final Data - main.py",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "python": "${workspaceFolder}\\venv\\Scripts\\python.exe",
+            "env": {},
+            "cwd": "${workspaceFolder}\\02_Final_data\\ConvertScript",
+            "stopOnEntry": false,
+            "debugOptions": [],
+            "externalConsole": false,
+            "justMyCode": true,
+            "exceptionHandling": {
+                "autogenBreakpoints": true,
+                "alwaysStopOnException": false,
+                "showBaseType": true
+            },
+            "console": "integratedTerminal"
+        }
+    ]
+}

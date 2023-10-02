@@ -1,0 +1,5 @@
+debug: True
+middle_version_path: 'D:/Training/AI_for_MCAL/source_code/Knowledge_Transfer/MCAL_BOT_Resources/02_Final_data/middle_data/Middle_DataV5'
+key_path: 'D:/Training/AI_for_MCAL/source_code/Knowledge_Transfer/MCAL_BOT_Resources/02_Final_data/middle_data/encryption_key.key'
+tokenizer_path: 'D:/Training/AI_for_MCAL/source_code/Knowledge_Transfer/MCAL_BOT_Resources/model/gpt4-x-vicuna-13B-GPTQ'
+embedding_dir: 'D:/Training/AI_for_MCAL/source_code/Knowledge_Transfer/MCAL_BOT_Resources/model/all-mpnet-base-v2-table'
