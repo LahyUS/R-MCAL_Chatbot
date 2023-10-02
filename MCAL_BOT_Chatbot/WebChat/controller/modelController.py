@@ -190,7 +190,13 @@ def streamResponse(chatMode:int, token:str, question:str, history=[], path=""):
     # Send prepared package to server
     try:
         response = requests.post(url, headers=headers, data=json_data, stream=True, timeout=RESPONSE_TIMEOUT)
-        print(f"[modelController]---- response: {response}")
+        raw = response.json()
+        data = json.loads(raw)
+        textArr = data["status"]
+        print(f"[textArr]---- textArr: {textArr}")
+
+        for reply in textArr:
+             yield Status.SUCCESS, dataDecoded["answer"], dataDecoded["key"]
         for chunk in response.iter_lines(decode_unicode=False, delimiter=b"\0"):
             if chunk:
                 try:
