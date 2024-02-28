@@ -5,11 +5,11 @@ import re
 print(f"\n########### INITIALIZATION PHASE ###########")
 start_time = time.time()
 from _tokenizer import TOKENIZER
-from _keyword import KEYWORD
+#from _keyword import KEYWORD
 from _retrieve import RETRIEVE
 from _database import DATABASE
 from _classifyQuestion import CLASSIFY_QUESTION
-from _correctSpelling import CORRECT_SPELLING
+#from _correctSpelling import CORRECT_SPELLING
 end_time = time.time()
 processing_time = end_time - start_time
 print(f"\nTOTAL INTIALIZATION TIME: {processing_time}\n\n")
@@ -24,12 +24,12 @@ class QnA:
     def __init__(self):
         start_time_qa = time.time()
 
-        self.Keyword = KEYWORD()
+        #self.Keyword = KEYWORD()
         self.Retrieve = RETRIEVE()
         self.Tokenizer = TOKENIZER()
         self.Database = DATABASE()
-        self.ClassifyQuestion = CLASSIFY_QUESTION()
-        self.CorrectSpelling = CORRECT_SPELLING()
+        self.ClassifyQuestion = None
+        #self.CorrectSpelling = CORRECT_SPELLING()
         self.previous_retrieved_data = []
         self.previous_reference = []
 
@@ -37,6 +37,11 @@ class QnA:
         QA_init_time = end_time_qa - start_time_qa
         print(f"\nQA_init_time: {QA_init_time} seconds")
 
+    def get_classify_question(self):
+        if self.ClassifyQuestion is None:
+            # Lazy initialization
+            self.ClassifyQuestion = CLASSIFY_QUESTION()
+        return self.ClassifyQuestion
 
     def get_query_data(self, path, question):
         """
@@ -62,7 +67,8 @@ class QnA:
         # Classify question for more accurate prompt
         index_type, nouns, prop_nouns = self.ClassifyQuestion.run(question)
         # Convert sets to lists and concatenate the words with a space as the separator
-        query = ' '.join(list(nouns) + list(prop_nouns))
+        keyword_list = list(nouns) + list(prop_nouns)
+        query = ' '.join(keyword_list)
 
         if index_type == CLASSIFY_GREET_SENTENCE:
             return question, "", "", [], [], [], NONCHAINCONVERSATION
@@ -72,7 +78,7 @@ class QnA:
 
         else:
             # Retrieve new data and references with the expected ratio 
-            retrieved_data, references, new_wkproduct_links, guideline_links, guidelines = self.Retrieve.run(path, query, int(config.number_of_query))
+            retrieved_data, references, new_wkproduct_links, guideline_links, guidelines = self.Retrieve.run(path, query, keyword_list, int(config.number_of_query))
 
             references = references[:min(config.link_number, len(references))] # Limit the reference list
 

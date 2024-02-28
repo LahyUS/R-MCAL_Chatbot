@@ -153,6 +153,8 @@ def voteSubmit(user_id:int, token:str, message_id:int, react:int):
         "message_id": message_id,
         "react": react
     }
+    print("Chatcontroller voteSubmit =============================")
+    print(data)
     url = DATABASE_HOSTNAME + '/submitReact'
 
     json_data = json.dumps(data)
@@ -163,15 +165,46 @@ def voteSubmit(user_id:int, token:str, message_id:int, react:int):
 
         if response.status_code == 200:
             if response.json()["status"] == 1:
-                print("Update message react successfully!")
+                print("Update message react Successfully!")
                 return Status.SUCCESS
             else:
+                print("Update message react Failed!")
                 return Status.FAIL
     except requests.exceptions.ConnectionError as err:
         print("Connection Error:", str(err))
     except requests.exceptions.RequestException as err:
         print("Error occurred while making the request:", str(err))
     print("Update message react has a problem!")
+    return Status.ERROR
+
+def voteSubmitFeedback(user_id:int, token:str, message_id:int, feedback:str):
+    data = {
+        "user_id": user_id,
+        "token":token,
+        "message_id": message_id,
+        "feedback": feedback
+    }
+
+    url = DATABASE_HOSTNAME + '/submitFeedback'
+
+    json_data = json.dumps(data)
+
+    headers = {'Content-Type': 'application/json', "api-key":API_KEY}
+    try:
+        response = requests.post(url, headers=headers, data=json_data)
+
+        if response.status_code == 200:
+            if response.json()["status"] == 1:
+                print("Update feedback Successfully!")
+                return Status.SUCCESS
+            else:
+                print("Update feedback Failed!")
+                return Status.FAIL
+    except requests.exceptions.ConnectionError as err:
+        print("Connection Error:", str(err))
+    except requests.exceptions.RequestException as err:
+        print("Error occurred while making the request:", str(err))
+    print("Update feedback has a problem!")
     return Status.ERROR
 
 def deleteConversation(user_id:int, token:str, titleID):

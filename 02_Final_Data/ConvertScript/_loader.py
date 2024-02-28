@@ -7,23 +7,91 @@ import glob
 from extern_variables import *
 config = CONFIG()
 
+class SectionNode:
+    def __init__(self, name):
+        self.name = name
+        self.children = []
+        self.parent = None
+
+    def add_child(self, child):
+        self.children.append(child)
+        child.parent = self
+
+    def get_full_header(self):
+        if self.parent:
+            return self.parent.get_full_header() + " - " + self.name
+        else:
+            return self.name
+
 class LOADER:
     def __init__(self, type):
         self.type = type
 
-    def getDocumentContent(self, document_path, document_type, header, document, error_log_path):
+    def getDocumentContent(self, document_path, document_type, header, document, error_log_path, parent_data=[-1, ''], parent_section=None):
         if self.type == 'AUTOSAR':
             convert = AUTOSAR()
         elif self.type == 'BASE':
             convert = BASE_FORMAT()
         convert.getMetadata(document_path, document_type, header)
-        convert.getContent(document, error_log_path)
-        subheaders = header['subheader']
-        if len(subheaders) == 0:
-            return
-        else:
+
+        if 'MCAL_WPS' in document_path:
+            # New SectionNode creation and hierarchy management
+            section_name = convert.section_name if convert.section_name else os.path.splitext(os.path.basename(document_path))[0]
+            current_section = SectionNode(section_name)
+            if parent_section:
+                parent_section.add_child(current_section)
+            else:
+                # For root sections, you may want to store them separately or handle them as needed
+                # e.g., self.root_sections.append(current_section)
+                root_name = convert.section_name if convert.section_name else os.path.splitext(os.path.basename(document_path))[0]
+                child_node = SectionNode(root_name)
+                current_section.add_child(child_node)
+
+            # Update the section name in the metadata based on hierarchy
+            full_header = current_section.get_full_header()
+            convert.metadata["section_name"] = full_header
+
+            # Existing code to process the document content
+            convert.getContent(document, error_log_path)
+            
+            # Existing recursive call for subheaders
+            subheaders = header.get('subheader', [])
             for subheader in subheaders:
-                self.getDocumentContent(document_path, document_type, subheader, document, error_log_path)
+                self.getDocumentContent(document_path, document_type, subheader, document, error_log_path, parent_data.copy(), current_section)
+
+        else:
+            current_level = convert.level
+            previous_level, upper_parent_name = parent_data
+
+            if current_level == 0 or not bool(current_level):
+                root_name = convert.section_name if convert.section_name else os.path.splitext(os.path.basename(document_path))[0]
+                upper_parent_name = root_name
+            else:
+                if current_level > previous_level:
+                    # Moving to a deeper level
+                    if previous_level != -1:  # Avoid adding to root if it's the first level
+                        upper_parent_name += ' - ' + convert.section_name
+                elif current_level < previous_level:
+                    # Moving back to a higher level or the same level
+                    # Reset upper_parent_name based on the current level
+                    sections = upper_parent_name.split(' - ')
+                    upper_parent_name = ' - '.join(sections[:current_level]) + ' - ' + convert.section_name
+                else:
+                    # Same level, replace the last section name
+                    sections = upper_parent_name.split(' - ')
+                    sections[-1] = convert.section_name
+                    upper_parent_name = ' - '.join(sections)
+
+            # Update the section name in the metadata
+            convert.metadata["section_name"] = upper_parent_name
+            parent_data[0] = current_level
+            parent_data[1] = upper_parent_name
+
+            convert.getContent(document, error_log_path)
+            subheaders = header.get('subheader', [])
+            for subheader in subheaders:
+                self.getDocumentContent(document_path, document_type, subheader, document, error_log_path, parent_data=parent_data.copy())
+
 
     def singleFileLoad(self, json_data, document_path, document_type, error_log_path):            
         document = []
@@ -67,25 +135,42 @@ class BASE_FORMAT():
         # Extract contents from each paragraph in the current document scope
         for i in range(len(self.paragraphs)):
             paragraph = self.paragraphs[i]
-            if paragraph != '':
-                if paragraph[0] != '' and self.checkStartParagraph(paragraph[0]):
-                    if(self.checkTableOfContent(paragraph[0])):
-                        table_of_content += paragraph[0].split('....')[0] + '\n'
+
+            if isinstance(paragraph, list):
+                raw_content = paragraph[0]
+            elif isinstance(paragraph, str):
+                raw_content = paragraph
+            else:
+                print(f"[DEBUG] raw_content has invalid format!!!")
+
+
+            if len(raw_content) > 1 :
+                if raw_content != '' and self.checkStartParagraph(raw_content):
+                    if(self.checkTableOfContent(raw_content)):
+                        table_of_content += raw_content.split('....')[0] + '\n'
                         continue
-                    
-                    if(self.checkEndParagraph(paragraph[0])):
-                        content += paragraph[0].rstrip(' ') + '\n'
+
+                    if(self.checkEndParagraph(raw_content)):
+                        content += raw_content.rstrip(' ') + '\n'
+
                     else:
-                        content += paragraph[0]
+                        content += raw_content + ' '
         
         # Get content of the table
         self.getTable()
 
         # Check for valid content, return if empty
-        if content == '' and len(self.tables) == 0: return
-        elif content == '': pass
+        if content == '' and len(self.tables) == 0: 
+            return
+        elif content == '': 
+            pass
         # If exist content, parse and update content variable
-        else: content = self.section_name.rstrip(' ') + '\n' + content
+        else:
+            if len(self.metadata['section_name']) > 0:
+                # Check section name and correct if needed. By removing brackets [] in section name
+                self.section_name = self.adjustSectionName(self.section_name)
+                self.metadata['section_name'] = self.adjustSectionName(self.metadata['section_name'])
+                content = '### ' + self.metadata['section_name'].rstrip(' ') + " ###: \n" + content
 
         # Finds specific substrings that match the defined pattern, and modify the current table by adding {requirement_table}
         content = self.addRequirementTable(content)
@@ -97,19 +182,21 @@ class BASE_FORMAT():
         # Post process each content chunk
         for i in range(len(content_chunks)):
             try:
-                if i == 0: # Skip the first chunk, it's always the heading of the content 
-                    pass
+                # if i == 0: # Skip the first chunk, it's always the heading of the content 
+                #     pass
                 
                 # Check for ending of a requirement
-                elif self.checkEndRequirement(content_chunks[i]) == True: 
+                if self.checkEndRequirement(content_chunks[i]) == True: 
                     content_chunks[i] = content_chunks[i] + '**'
 
-                # Check for starting with a valid character or not
-                elif self.startsWithValidCharacter(content_chunks[i]) == True and self.startsWithValidCharacter(content_chunks[i-1]) == False:
-                    content_chunks[i] = '*\n' + content_chunks[i]
+                else:
+                    content_chunks[i] = content_chunks[i] + '*'
+                # # Check for starting with a valid character or not
+                # elif self.startsWithValidCharacter(content_chunks[i]) == True and self.startsWithValidCharacter(content_chunks[i-1]) == False:
+                #     content_chunks[i] = '*\n' + content_chunks[i]
                 
-                elif self.startsWithValidCharacter(content_chunks[i]) == True and self.startsWithValidCharacter(content_chunks[i-1]) == True:
-                    content_chunks[i-1] = content_chunks[i-1] + '*'
+                # elif self.startsWithValidCharacter(content_chunks[i]) == True and self.startsWithValidCharacter(content_chunks[i-1]) == True:
+                #     content_chunks[i-1] = content_chunks[i-1] + '*'
             except:
                 pass
 
@@ -131,6 +218,7 @@ class BASE_FORMAT():
 
         # To separate requirements if exist, Re-factory the content chunks into sub-strings by split it by '**'.     
         content_chunks = content.split(self.splitContentChunkPatterns)
+        content_chunks = [chunk for chunk in content_chunks if chunk != '']
 
         start_table = 0
         # Handle content and store in document
@@ -139,18 +227,18 @@ class BASE_FORMAT():
 
             # If there is a requirement table in the content chunk, get its content
             if '{requirement_table}' in content_chunk:
-                self.getTableContent(content_chunk, start_table)  
+                required_table_text = self.getTableContent(content_chunk, start_table)  
+                content_chunk = content_chunk.replace('{requirement_table}', required_table_text)  
 
             # Remove spaces at the beginning and at the end of the string
             if content_chunk.strip() == '':
                 continue
 
-            # Check for valid section name
+            # Add section name as a heading for each content chunk
             if self.section_name != '' and i != 0:
-                content_chunk = self.section_name.rstrip(' ') + '\n' + content_chunk
+                #content_chunk = self.section_name.rstrip(' ') + '\n' + content_chunk
+                content_chunk = '### ' + self.metadata['section_name'].rstrip(' ') + " ###: \n" + content_chunk
 
-            # Check section name and correct if needed. By removing brackets [] in section name
-            self.section_name = self.adjustSectionName(self.section_name)
             document.extend([Document(page_content=content_chunk, metadata=self.metadata)])
 
         # Handle table in list of tables and store in document
@@ -174,10 +262,10 @@ class BASE_FORMAT():
                     document.extend([Document(page_content=part.rstrip('\n'), metadata=self.metadata)])
             # Else this is a normal table, collect its data content, then store in document        
             else:
-                table_content = ''
+                table_content = '### ' + self.metadata['section_name'].rstrip(' ') + " ###: \n" 
                 for part in info:
                     table_content += part
-                document.extend([Document(page_content=self.section_name.rstrip(' ') + '\n' + table_content, metadata=self.metadata)])
+                document.extend([Document(page_content=table_content, metadata=self.metadata)])
 
     def checkStartParagraph(self, text:str) -> bool:
         for string in self.startParagraphPhrases:
@@ -253,7 +341,7 @@ class BASE_FORMAT():
                     page_content = rawData(page_content)
                     horizontalTable.append(page_content+'\n')
         except:
-            with open(self.error_log_path, 'a') as file:
+            with open(self.error_log_path, 'a', encoding='utf-8') as file:
                 file.write('Table error in section ' + self.section_name + '\n')
             pass
         return horizontalTable
@@ -323,7 +411,7 @@ class BASE_FORMAT():
         self.document_path  = document_path
 
         try: self.version   = document_path.split('/')[1]
-        except:self.version = ''
+        except: self.version = ''
 
         self.document_name  = os.path.basename(document_path)
         self.document_type  = document_type
@@ -331,9 +419,19 @@ class BASE_FORMAT():
         self.level          = header['level'] if header['level'] != [] else 0
         self.section_name   = header['name'] if len(header['name']) > 0 else ''
         self.section_number = self.extractNumbers(self.section_name) if self.section_name != '' else ''
-        self.wkproduct_link = header['wkproduct_link'] if len(header['wkproduct_link']) > 0 else ''
-        self.guideline_link = header['guideline_link'] if len(header['guideline_link']) > 0 else ''
-        self.guideline      = header['guideline'] if len(header['guideline']) > 0 else ''
+        
+        self.wkproduct_link = ''
+        self.guideline_link = ''
+        self.guideline      = ''
+
+        if 'wkproduct_link' in header:
+            self.wkproduct_link = header['wkproduct_link'] if len(header['wkproduct_link']) > 0 else ''
+        
+        if 'guideline_link' in header:
+            self.guideline_link = header['guideline_link'] if len(header['guideline_link']) > 0 else ''
+        
+        if 'guideline' in header:
+            self.guideline      = header['guideline'] if len(header['guideline']) > 0 else ''
 
         self.metadata = {"guideline"     : self.guideline,
                         "guideline_link" : self.guideline_link,
@@ -407,11 +505,11 @@ class AUTOSAR(BASE_FORMAT):
         except:
             pass
 
-        content_chunk = content_chunk.replace('{requirement_table}', table_content)  
+        return table_content 
 
     def adjustSectionName(self, text:str) -> str:
         if '[' in text and ']' in text:
-            text = text.split('[', 1)[0]
+            text = text.replace('[', '').replace(']', '')
         return text
 
     def addRequirementTable(self, text:str) -> str:

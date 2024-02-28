@@ -29,11 +29,13 @@ class RETRIEVE:
                     vectorized_texts_path = path + '/' + self.vectorized_texts_name
 
                     # Load vectorizer from pickle file
-                    with open(vectorizer_path, 'rb') as file: vectorizer = pickle.load(file)
+                    with open(vectorizer_path, 'rb') as file: 
+                        vectorizer = pickle.load(file)
                     # Load vectorized_texts from pickle file
-                    with open(vectorized_texts_path, 'rb') as file: vectorized_texts = pickle.load(file)
+                    with open(vectorized_texts_path, 'rb') as file: 
+                        vectorized_texts = pickle.load(file)
 
-                    # TFIDF Algorithm Run
+                    # TFIDF Algorithm Runv
                     ## Pre-process and compute TF-IDF value for the question 
                     vectorized_keywords = vectorizer.transform([simplifyQuestion(question)])
                     ## Get cosine similarity score vector of vectorized texts and vectorized question
@@ -59,7 +61,7 @@ class RETRIEVE:
                         for index in range(len(top_match_indices)): # Add the satisfied document to the return list
                             document.append(path + '||' + str(top_match_indices[index]) + '||' + str(top_similarity_scores[index]))
 
-    def get_index_data(self, document, number_of_query):
+    def get_index_data(self, document, number_of_query, keyword_list):
         index_data = []
         # Get the similarity value of the handled document
         similarity_scores = [float(element.split('||')[2]) for element in document]
@@ -104,7 +106,15 @@ class RETRIEVE:
                     # Decode content if any
                     if config.need_decode:
                         text = self.cryptography.decode_text(text)
-
+                    
+                    count = 0
+                    # If there is not any matched keyword, the indexed data is consider to be a not good information
+                    for keyword in keyword_list:
+                        if keyword.lower() in text.lower():
+                            count += 1
+                    if count == 0:
+                        continue
+                    
                     # Update the decoded content into the 'content' field
                     json_data['document'][int(number)]['content'] = text
                     # Utilize JSON format, so append the json_data into the return index_data list
@@ -171,7 +181,7 @@ class RETRIEVE:
         
         return reference_links, wkproduct_links, guideline_links, guidelines
 
-    def run(self, path, question, number_of_query):
+    def run(self, path, question, keyword_list, number_of_query):
         if number_of_query <= 0: return [], [], "", "", ""
         path = config.data + path
 
@@ -179,7 +189,7 @@ class RETRIEVE:
         # Iterate through the vectorized text documents to find the matching data
         self.child_folder(path, document, question, number_of_query)
         # With the matched data, get its content from JSON file
-        index_data = self.get_index_data(document, number_of_query)
+        index_data = self.get_index_data(document, number_of_query, keyword_list)
 
         # Re-factory index_data to be a unique set of content data
         unique_page_content = set(data['content'] for data in index_data)
@@ -198,8 +208,29 @@ class RETRIEVE:
         acronyms = []
         for link in reference_links:
             if 'AUTOSAR' in link:
-                folder_link = config.data + 'internal/' + ('/').join(link.split('/')[:2])
-                document_name = link.split('/')[-1].split('.')[0]
+                if ':' in link:
+                    # # Step 1: Find the index of the first backslash
+                    # start_index = link.find('\\') + 1
+
+                    # # Step 2: Find the index of the dot, then find the last backslash before it
+                    # dot_index = link.find('.')
+                    # end_index = link.rfind('\\', 0, dot_index)
+
+                    # Step 1: Find the index of the first backslash
+                    start_index = link.find('\\') + 1
+
+                    # Step 2: Find the index of the dot, then find the last backslash before it
+                    end_index = link.find('|')
+                    # Extract the substring
+                    link = link[start_index:end_index]
+
+                    folder_link = config.data + 'internal/' + ('/').join(link.split('\\')[:2])
+                    document_name = link.split('\\')[-1].split('.')[0]
+
+                else:
+                    folder_link = config.data + 'internal/' + ('/').join(link.split('/')[:2])
+                    document_name = link.split('/')[-1].split('.')[0]
+
                 with open(folder_link + '/data.json', 'r') as file:
                     json_data = json.load(file)
                     for part in json_data['acronym'][document_name]:

@@ -1,0 +1,52 @@
+{
+  "builder_name": "parquet",
+  "citation": "",
+  "config_name": "default",
+  "dataset_name": "imdb-truncated",
+  "dataset_size": 2639780,
+  "description": "",
+  "download_checksums": {
+    "hf://datasets/shawhin/imdb-truncated@8713637d0b75dbb58fd06b620e50dbd8a9372fa0/data/train-00000-of-00001-5a744bf76a1d84b2.parquet": {
+      "num_bytes": 835863,
+      "checksum": null
+    },
+    "hf://datasets/shawhin/imdb-truncated@8713637d0b75dbb58fd06b620e50dbd8a9372fa0/data/validation-00000-of-00001-a3a52fabb70c739f.parquet": {
+      "num_bytes": 852949,
+      "checksum": null
+    }
+  },
+  "download_size": 1688812,
+  "features": {
+    "label": {
+      "dtype": "int64",
+      "_type": "Value"
+    },
+    "text": {
+      "dtype": "string",
+      "_type": "Value"
+    }
+  },
+  "homepage": "",
+  "license": "",
+  "size_in_bytes": 4328592,
+  "splits": {
+    "train": {
+      "name": "train",
+      "num_bytes": 1310450,
+      "num_examples": 1000,
+      "dataset_name": "imdb-truncated"
+    },
+    "validation": {
+      "name": "validation",
+      "num_bytes": 1329330,
+      "num_examples": 1000,
+      "dataset_name": "imdb-truncated"
+    }
+  },
+  "version": {
+    "version_str": "0.0.0",
+    "major": 0,
+    "minor": 0,
+    "patch": 0
+  }
+}

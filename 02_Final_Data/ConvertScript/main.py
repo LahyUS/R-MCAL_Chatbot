@@ -5,7 +5,7 @@ from extern_variables import *
 convert = CONVERTER(type = 'AUTOSAR')
 convert.run(module_sub_path = 'MCAL_WPS', 
             output_path = OUTPUT_PATH, 
-            save_format = 3, encode = True)
+            save_format = 3, encode = False)
 
 # Convert Hardware Manual document
 # convert = CONVERTER(type = 'BASE')

@@ -4,6 +4,7 @@ class RequestStatus(Enum):
     SUCCESS = 1
     FAIL = 2
     ERROR = 3
+    DUPPLICATE_USER = 4
     
     
 class ErrorCode(Enum):

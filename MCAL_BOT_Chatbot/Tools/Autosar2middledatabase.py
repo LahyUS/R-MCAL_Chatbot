@@ -209,7 +209,7 @@ def Doc2MiddleData(Document):
             doc = aw.Document(output_file_path)
             doc.save("../Temporaries/output.html")
            # read the text from the document  
-            with open("../Temporaries/output.html", 'r') as file:
+            with open("../Temporaries/output.html", 'r', encoding='utf-8') as file:
                 html_content = file.read()
                 soup = BeautifulSoup(html_content, 'html.parser')
                 soup = soup.div

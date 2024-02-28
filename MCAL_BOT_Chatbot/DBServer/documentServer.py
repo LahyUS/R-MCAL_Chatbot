@@ -48,20 +48,24 @@ def buildFolderTree(root_path, result):
             result[root_path].append(obj)
     return result[root_path]
  
-@app.route('/files/<filepath>', methods=["GET"])
+@app.route('/files/<filepath>', methods=["GET", "POST"])
 def get_file(filepath):
 
     filepath = filepath.replace("!", "/")
-    print(filepath)
+    print(f"[DEBUG] filepath: {filepath}")
     file_path = os.path.join(PATH_TO_DATABASE, filepath)
+    print(f"[DEBUG] file_path: {file_path}")
 
     if os.path.exists(file_path):
-        print("Exist", file_path)
+        print(f"[DEBUG] Filepath exists")
 
         filename = os.path.basename(file_path)
         _, file_extension = os.path.splitext(filename)
+        print(f"[DEBUG] filename: {filename}")
+        
 
         file_extension = file_extension[1:]
+        print(f"[DEBUG] file_extension: {file_extension}")
         
         if file_extension.lower() in str("pdf").lower():
             print("PDF file request")
@@ -107,4 +111,4 @@ def getFolderTree():
     return json.dumps(response)
 
 if __name__ == '__main__':
-    app.run(port=2234)
+    app.run(host='0.0.0.0', port=2234)

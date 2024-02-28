@@ -3,7 +3,11 @@ import json
 from helper.enumerate import RequestStatus as Status
 from helper.enumerate import ChatMode
 import re
+import aiohttp
+import httpx
+import time
 
+SESSION = requests.Session()
 # MODEL_HOSTNAME = "http://127.0.0.1:1235"
 MODEL_HOSTNAME = ""
 RESPONSE_TIMEOUT = 1800
@@ -19,10 +23,12 @@ print(f"[DEBUG] MODEL_HOSTNAME: {MODEL_HOSTNAME}")
 def connectToServer(token:str):
     # Create request package to send to server
     url = MODEL_HOSTNAME + '/connect'
-    headers = {"Authorization": f"Bearer {token}"}
-
+    headers = {"Authorization": f"Bearer {token}",
+                'Content-Type': 'application/json'}
+    print(f"[DEBUG] connectToServer - token: {token}")
     try:
-        response = requests.post(url, headers=headers)
+        response = SESSION.post(url, headers=headers)
+        #response = SESSION.post(url)
         print("[modelController]++++ response:", response)
         if response.status_code == 200:
             # Request was successful
@@ -46,10 +52,11 @@ def connectToServer(token:str):
 def disconnecFromServer(token:str):
     # Create request package to send to server
     url = MODEL_HOSTNAME + '/disconnect'
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = {"Authorization": f"Bearer {token}",
+                'Content-Type': 'application/json'}
 
     try:
-        response = requests.post(url, headers=headers)
+        response = SESSION.post(url, headers=headers)
 
         if response.status_code == 200:
             # Request was successful
@@ -127,7 +134,7 @@ def get_answer_from_custom_model(question:str):
         return Status.SUCCESS, answer
     else:
         return Status.ERROR, 'Failed to get an answer.'
-    
+
 def streamResponse(chatMode:int, token:str, question:str, history=[], path=""):
     #print("\n\n##########################################################")
     print("[modelController]____ streamResponse")
@@ -156,22 +163,8 @@ def streamResponse(chatMode:int, token:str, question:str, history=[], path=""):
             path = knowledge
         data["path"] = "internal/" + path
 
-        # REMOVE REFERNCES IN CHAT
-        # if len(history) > 0:
-        #     for i, chat in enumerate(history):
-        #         if isinstance(chat[1], str):
-        #             j = chat[1].find("**Reference documents:**")
-        #             if j != -1:
-        #                 tmp = history[i][1][:j]
-        #                 if "<br>" in tmp:
-        #                     tmp = tmp.replace('<br>', '')
-        #                 history[i] = (history[i][0], tmp)
-
         if len(history) > 1:
             history = history[:-1]
-
-            # if len(history) <= 5:  history = history
-            # else: history = history[-5:]
 
             history = [item for item in history if 'You have chosen option **' not in item[1]]
 
@@ -182,38 +175,36 @@ def streamResponse(chatMode:int, token:str, question:str, history=[], path=""):
     
     json_data = json.dumps(data)
     print(f"[DEBUG] DATA: {json_data}")
-    headers = {
-                'Content-Type': 'application/json',
-                'Authorization': f'Bearer {token}'
-                }
+    headers = {"Authorization": f"Bearer {token}",
+                'Content-Type': 'application/json'}
 
+    print(f"[DEBUG] streamResponse - token: {token}")
     # Send prepared package to server
     try:
-        response = requests.post(url, headers=headers, data=json_data, stream=True, timeout=RESPONSE_TIMEOUT)
-        raw = response.json()
-        data = json.loads(raw)
-        textArr = data["status"]
-        print(f"[textArr]---- textArr: {textArr}")
-
-        for reply in textArr:
-             yield Status.SUCCESS, dataDecoded["answer"], dataDecoded["key"]
-        for chunk in response.iter_lines(decode_unicode=False, delimiter=b"\0"):
-            if chunk:
-                try:
-                    dataDecoded = json.loads(chunk.decode())
-                    if response.status_code == 200:
-                        if dataDecoded["status"] == 1:
-                            yield Status.SUCCESS, dataDecoded["answer"], dataDecoded["key"]
-                            
-                        else:
-                            print("[modelController]++++ Connection Failed:")
-                            yield Status.FAIL, "Server has a problem", 0
-
-                except json.decoder.JSONDecodeError as err:
-                    print("[modelController]++++ Decode response data error:", str(err))
-                    yield Status.FAIL, "Server has a problem", 0
+        response = SESSION.post(url, headers=headers, data=json_data, stream=True, timeout=RESPONSE_TIMEOUT)
+        print(f"[modelController] response type: {type(response)}---- response: {response}")
+        #accumulated_text = ""
+        for chunk in response.iter_lines(decode_unicode=False, delimiter=b""):
+            try:
+                if chunk: 
+                    chunk_text = chunk.decode('utf-8')
+                    
+                    match = re.search(r"data:\s*{([^}]*)}", chunk_text)
+                    if match:
+                        modified_chunk_text = match.group(1)
+                        modified_chunk_text = '{' + modified_chunk_text + '}'
+                    else: modified_chunk_text = ""
+                    event_data = json.loads(modified_chunk_text)
+                    status = event_data.get("status")
+                    answer = event_data.get("answer")
+                    key = event_data.get("key")
+                    
+                    if status == 1:
+                        yield Status.SUCCESS, answer, key
+            except json.JSONDecodeError as e:
+                print(f"Error decoding JSON from item: {answer} -  Error: {e}")
         return
-                                        
+                                
     except requests.exceptions.ConnectionError as err:
         print("[modelController]++++ Connection Error:", str(err))
 
@@ -222,7 +213,7 @@ def streamResponse(chatMode:int, token:str, question:str, history=[], path=""):
     
     print("[modelController]++++ Streanming response has problem")
     yield Status.ERROR, "Server has a problem", 0
-    
+   
 def getModelServerQueueLength():
     data = {
     }
@@ -233,7 +224,7 @@ def getModelServerQueueLength():
 
     headers = {'Content-Type': 'application/json'}
     try:
-        response = requests.post(url, headers=headers, data=json_data)
+        response = SESSION.post(url, headers=headers, data=json_data)
         response_json = json.loads(response.json())
         print(response_json)
         if response.status_code == 200:
@@ -250,7 +241,7 @@ def getModelServerQueueLength():
     print("Get queue length has a problem")
     return Status.ERROR, -1, -1, -1
 
-def stopStreaming(key):
+def stopStreaming(key:str, token:str):
     data = {
         "key":key
     }
@@ -259,23 +250,27 @@ def stopStreaming(key):
 
     json_data = json.dumps(data)
 
-    headers = {'Content-Type': 'application/json'}
+    headers = {"Authorization": f"Bearer {token}",
+                'Content-Type': 'application/json'}
     try:
-        response = requests.post(url, headers=headers, data=json_data)
-        response_json = json.loads(response.json())
-        print(response_json)
+        response = SESSION.post(url, headers=headers, data=json_data)
+        response_json = response.json()
         if response.status_code == 200:
             if int(response_json["status"]) == 1:
-                print("Stop streaming successfully!")
+                print("[modelController] Stop streaming successfully!")
                 return Status.SUCCESS
             else:
+                print("[modelController] Stop streaming Failed!")
+                response.raise_for_status()
                 return Status.FAIL
+
     except requests.exceptions.ConnectionError as err:
-        print("Connection Error:", str(err))
+        print("[modelController] Connection Error:", str(err))
+        
     except requests.exceptions.RequestException as err:
-        print("Error occurred while making the request:", str(err))
+        print("[modelController] Error occurred while making the request:", str(err))
     
-    print("Stop streaming has a problem")
+    print("[modelController] Stop streaming has a problem")
     return Status.ERROR
 
 def uploadDocument(jsonData, path, file_name):
@@ -285,56 +280,53 @@ def uploadDocument(jsonData, path, file_name):
         "data": jsonData,
         "file_name": file_name
     }
-    
     url = MODEL_HOSTNAME + "/uploadDocument"
-
     json_data = json.dumps(data)
-
     headers = {'Content-Type': 'application/json'}
+    
     try:
-        response = requests.post(url, headers=headers, data=json_data)
-        response_json = json.loads(response.json())
-        print(response_json)
+        response = SESSION.post(url, headers=headers, data=json_data)
+        raw_response = response.json()
+        status = raw_response['status']
         if response.status_code == 200:
-            if int(response_json["status"]) == 1:
-                print("Upload document successfully!")
+            if int(status) == 1:
+                print("[DEBUG] modelController - Upload document successfully!")
                 return Status.SUCCESS
             else:
                 return Status.FAIL
     except requests.exceptions.ConnectionError as err:
-        print("Connection Error:", str(err))
+        print("[DEBUG] modelController - Connection Error:", str(err))
     except requests.exceptions.RequestException as err:
-        print("Error occurred while making the request:", str(err))
+        print("[DEBUG] modelController - Error occurred while making the request:", str(err))
     
-    print("Upload document has a problem")
+    print("[DEBUG] modelController - Upload document has a problem")
     return Status.ERROR
 
 def deleteDocument(file_path):
     data = {
         "path": file_path
     }
-    
     url = MODEL_HOSTNAME + "/deleteDocument"
-
     json_data = json.dumps(data)
-
     headers = {'Content-Type': 'application/json'}
+    
     try:
-        response = requests.post(url, headers=headers, data=json_data)
-        response_json = json.loads(response.json())
-        print(response_json)
+        response = SESSION.post(url, headers=headers, data=json_data)
+        raw_response = response.json()
+        status = raw_response['status']
+
         if response.status_code == 200:
-            if int(response_json["status"]) == 1:
-                print("Delete document successfully!")
+            if int(status) == 1:
+                print("[DEBUG] modelController - Delete document successfully!")
                 return Status.SUCCESS
             else:
                 return Status.FAIL
     except requests.exceptions.ConnectionError as err:
-        print("Connection Error:", str(err))
+        print("[DEBUG] modelController - Connection Error:", str(err))
     except requests.exceptions.RequestException as err:
-        print("Error occurred while making the request:", str(err))
+        print("[DEBUG] modelController - Error occurred while making the request:", str(err))
     
-    print("Delete document has a problem")
+    print("[DEBUG] modelController - Delete document has a problem")
     return Status.ERROR
 
 # Todo:  Handle user call API model 

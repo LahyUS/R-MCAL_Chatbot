@@ -1,61 +1,18 @@
-#import mysql.connector
-import sqlite3
-
-from flask import Flask, request, jsonify, g
+import mysql.connector
+from flask import Flask, request, jsonify
 import json
 from functools import wraps
 
-
-# Connect to our Database
-DATABASE_PATH = ''
-with open("../config.json", 'r') as file:
-    config = json.load(file)
-    if len(config) > 0:
-        DATABASE_PATH = config["path_to_database"]
-# mydb = None
-# try:
-#     # Connect to DB and create a cursor
-#     mydb = get_db()
-#     cursor = mydb.cursor()
-#     print(f'DB Init from: {DATABASE_PATH}')
- 
-#     sql = "SELECT * FROM users WHERE username = ?"# AND password = %s"
-#     query_username = 'Khanh'
-#     val = (query_username,)
-#     cursor.execute(sql, val)
-#     result = cursor.fetchone()
-#     print(f"SQL Query result: {result}")
- 
-#     # Close the cursor
-#     cursor.close() 
-# # Handle errors
-# except sqlite3.Error as error:
-#     print('Error occurred - ', error)
-
-# mydb = mysql.connector.connect(
-#     host="127.0.0.1",
-#     user="root",
-#     passwd="password",
-#     database="ChatBot"
-# )
+mydb = mysql.connector.connect(
+    host="127.0.0.1",
+    user="rvc",
+    passwd="Pass1234",
+    database="chatbot_db"
+)
 
 app = Flask(__name__)
 
 app.config["api-key"] = "af84e3cdeaed21a9220fb4fb7a9611de9d1abf85e0642ef50c71076a9fcba150"
-
-
-def get_db():
-    db = getattr(g, '_database', None)
-    if db is None:
-        db = g._database = sqlite3.connect(DATABASE_PATH)
-    return db
-
-@app.teardown_appcontext
-def close_db(exception):
-    db = getattr(g, '_database', None)
-    if db is not None:
-        db.close()
-
 
 def api_key_check(func):
     @wraps(func)
@@ -71,9 +28,8 @@ def api_key_check(func):
     return decorated
 
 def token_check(token):
-    mydb = get_db()
     mycursor = mydb.cursor()
-    sql = "SELECT * FROM users WHERE token = ?"
+    sql = "SELECT * FROM users WHERE token = %s"
     val = [token]
     mycursor.execute(sql, list(val))
     result = mycursor.fetchone()
@@ -86,30 +42,81 @@ def token_check(token):
 def login():
     data = request.get_json()
     if "username" in data and "password" in data:
-        print(data)
         username = data['username']
         password = data['password']
-        mydb = get_db()
         mycursor = mydb.cursor()
-        sql = "SELECT * FROM users WHERE username = ? AND password = ?"
-        val = (username, password)
-        mycursor.execute(sql, val)
-        result = mycursor.fetchone()
-        print(result)
-        if result:
+        
+        # Check if the user is already logged in
+        sql_check_login_status = "SELECT login_status FROM users WHERE username = %s"
+        mycursor.execute(sql_check_login_status, (username,))
+        login_status = mycursor.fetchone()
+        print(f"[DEBUG] login_status: {login_status}")
+        print(f"[DEBUG] login_status[0]: {login_status[0]}")
+        if login_status and (login_status[0] == 1 or  login_status[0] == True):
+            print(f"[DEBUG] Duplicate user login")
             return jsonify({
-                "status":1,
+                "status": 3,
+                "msg": "User is already logged in"
+            })
+
+        # If not logged in, proceed to verify the username and password
+        sql_verify_login = "SELECT * FROM users WHERE username = %s AND password = %s"
+        val = (username, password)
+        mycursor.execute(sql_verify_login, val)
+        result = mycursor.fetchone()
+
+        if result:
+            # Set the login_status to True
+            sql_set_login_status = "UPDATE users SET login_status = TRUE WHERE username = %s"
+            mycursor.execute(sql_set_login_status, (username,))
+            mydb.commit()
+
+            return jsonify({
+                "status": 1,
                 "isAdmin": result[3],
                 "user_id": result[0],
-                "msg":"Login successfully",
+                "msg": "Login successfully",
                 "token": result[4]
             })
         else:
             return jsonify({
-                "status":0,
-                "msg":"Username or password incorrect"
+                "status": 2,
+                "msg": "Username or password incorrect"
+            })
+            
+    return jsonify({'Message': 'Invalid data'}), 403
+
+
+@app.route('/logout', methods=["POST"])
+@api_key_check
+def logout():
+    data = request.get_json()
+    if "user_id" in data:
+        user_id = data['user_id']
+        mycursor = mydb.cursor()
+
+        # Check if the user is already logged in
+        sql_check_login_status = "SELECT login_status FROM users WHERE id = %s"
+        mycursor.execute(sql_check_login_status, (user_id,))
+        login_status = mycursor.fetchone()
+
+        if login_status and login_status[0]:
+            # Set the login_status to False
+            sql_set_login_status = "UPDATE users SET login_status = FALSE WHERE id = %s"
+            mycursor.execute(sql_set_login_status, (user_id,))
+            mydb.commit()
+
+            return jsonify({
+                "status": 1,
+                "msg": "Logout successful"
+            })
+        else:
+            return jsonify({
+                "status": 2,
+                "msg": "User is not currently logged in"
             })
     return jsonify({'Message': 'Invalid data'}), 403
+
 
 # General chat mode APIs
 
@@ -120,13 +127,12 @@ def loadChatHistories(*args, **kwargs):
     if "token" in data and "user_id" in data:
         if token_check(data["token"]):
             userID = data["user_id"]
-            mydb = get_db()
             mycursor = mydb.cursor()
             sql = """
                 SELECT ct.id, ct.name, ct.knowledge, m.id, m.question, m.answer, m.react
                 FROM chat_titles ct
                 LEFT JOIN messages m ON ct.id = m.title_id
-                WHERE ct.user_id = ?
+                WHERE ct.user_id = %s AND ct.name IS NOT NULL
                 ORDER BY m.id
             """
             val = [userID]
@@ -171,16 +177,15 @@ def newTitle(*args, **kwargs):
     if "token" in data and "user_id" in data and "title" in data:
         if token_check(data["token"]):
             userID = data["user_id"]
-            mydb = get_db()
             mycursor = mydb.cursor()
-            sql = "SELECT * FROM chat_titles WHERE name = ? AND user_id = ?"
+            sql = "SELECT * FROM chat_titles WHERE name = %s AND user_id = %s"
             val = [data["title"], userID]
             mycursor.execute(sql, val)
             result = mycursor.fetchone()
             print(result)
             if(result is None):
                 mycursor = mydb.cursor()
-                sql = "INSERT INTO chat_titles (user_id, name) VALUES (?, ?)"
+                sql = "INSERT INTO chat_titles (user_id, name) VALUES (%s, %s)"
                 val = (userID, data["title"])
                 mycursor.execute(sql, val)
                 titleID = mycursor.lastrowid
@@ -203,23 +208,22 @@ def newMessage(*args, **kwargs):
     if "token" in data and "user_id" in data and "title" in data and "question" in data and "answer" in data:
         if token_check(data["token"]):
             userID = data["user_id"]
-            mydb = get_db()
             mycursor = mydb.cursor()
-            sql = "SELECT * FROM chat_titles WHERE name = ? AND user_id = ?"
+            sql = "SELECT * FROM chat_titles WHERE name = %s AND user_id = %s"
             val = [data["title"], userID]
             mycursor.execute(sql, val)
             result = mycursor.fetchone()
             print(result)
             if(result is None):
                 mycursor = mydb.cursor()
-                sql = "INSERT INTO chat_titles (user_id, name) VALUES (?, ?)"
+                sql = "INSERT INTO chat_titles (user_id, name) VALUES (%s, %s)"
                 val = (userID, data["title"])
                 mycursor.execute(sql, val)
                 mydb.commit()
                 
             elif result:
                 mycursor = mydb.cursor()
-                sql = "INSERT INTO messages (title_id, question, answer) VALUES (?, ?, ?)"
+                sql = "INSERT INTO messages (title_id, question, answer) VALUES (%s, %s, %s)"
                 val = (result[0], data["question"], data["answer"])
                 mycursor.execute(sql, val)
                 
@@ -246,9 +250,8 @@ def updateMessage(*args, **kwargs):
         if token_check(data["token"]):
             message_id = data["message_id"]
             answer = data["answer"]
-            mydb = get_db()
             mycursor = mydb.cursor()
-            sql = "UPDATE messages SET answer = ?, react = ? WHERE id = ?"
+            sql = "UPDATE messages SET answer = %s, react = %s WHERE id = %s"
             val = (answer, 0, message_id)
             
             try:
@@ -288,24 +291,63 @@ def submitReact(*args, **kwargs):
         if token_check(data["token"]):
             message_id = data["message_id"]
             react = data["react"]
-            mydb = get_db()
             mycursor = mydb.cursor()
-            sql = "UPDATE messages SET react = ? WHERE id = ?"
+            sql = "UPDATE messages SET react = %s WHERE id = %s"
             val = (react, message_id)
             
             try:
                 mycursor.execute(sql, val)
                 mydb.commit()
-            
+                print(f"[DEBUG] submitReact OK")
                 return jsonify({
                     "status":1
                 })
             except mysql.connector.Error as error:
+                print(f"[DEBUG] submitReact Connection Error")
                 return jsonify({
                     "status":0,
                     "msg" : error
                 })
+        print(f"[DEBUG] submitReact Invalid Token")
         return jsonify({"status":0, 'msg': 'Invalid token'}), 403
+
+    print(f"[DEBUG] submitReact Invalid Data")
+    return jsonify({"status":0, 'msg': 'Invalid data'}), 403
+
+@app.route('/submitFeedback', methods=["POST"])
+@api_key_check
+def submitFeedback(*args, **kwargs):    
+    data = request.get_json()
+    if "token" in data and "user_id" in data and "message_id" in data and "feedback" in data:
+        if token_check(data["token"]):
+            message_id = data["message_id"]
+            print(f"[DEBUG] message_id type: {type(message_id)} - Value: {message_id}")
+            feedback = data["feedback"]
+            print(f"[DEBUG] feedback type: {type(feedback)} - Value: {feedback}")
+            mycursor = mydb.cursor()
+            sql = "UPDATE messages SET feedback = %s WHERE id = %s"
+            val = (feedback, message_id)
+            
+            try:
+                mycursor.execute(sql, val)
+                mydb.commit()
+            
+                print(f"[DEBUG] submitFeedback OK")
+                return jsonify({
+                    "status":1
+                })
+
+            except mysql.connector.Error as error:
+                print(f"[DEBUG] submitFeedback Connection Error")
+                return jsonify({
+                    "status":0,
+                    "msg" : error
+                })
+        
+        print(f"[DEBUG] submitFeedback Invalid Token")
+        return jsonify({"status":0, 'msg': 'Invalid token'}), 403
+    
+    print(f"[DEBUG] submitFeedback Invalid Data")
     return jsonify({"status":0, 'msg': 'Invalid data'}), 403
 
 @app.route('/deleteConversation', methods=["POST"])
@@ -316,9 +358,8 @@ def deleteConversation(*args, **kwargs):
         if token_check(data["token"]):
             userID = data["user_id"]
             titleID = data["title_id"]
-            mydb = get_db()
             mycursor = mydb.cursor()
-            sql = "DELETE FROM chat_titles WHERE id = ? AND user_id = ?"
+            sql = "DELETE FROM chat_titles WHERE id = %s AND user_id = %s"
             val = [titleID, userID]
             
             try:
@@ -326,7 +367,7 @@ def deleteConversation(*args, **kwargs):
                 mydb.commit()
                 
                 mycursor = mydb.cursor()
-                sql = "DELETE FROM messages WHERE title_id = ?"
+                sql = "DELETE FROM messages WHERE title_id = %s"
                 val = [titleID]
                 
                 mycursor.execute(sql, list(val))
@@ -351,9 +392,8 @@ def updateKnowledge(*args, **kwargs):
         if token_check(data["token"]):
             title_id = data["title_id"]
             knowledge = data["knowledge"]
-            mydb = get_db()
             mycursor = mydb.cursor()
-            sql = "UPDATE chat_titles SET knowledge = ? WHERE id = ?"
+            sql = "UPDATE chat_titles SET knowledge = %s WHERE id = %s"
             val = (knowledge, title_id)
             
             try:
@@ -380,13 +420,12 @@ def loadChatHistoriesFile(*args, **kwargs):
     if "token" in data and "user_id" in data:
         if token_check(data["token"]):
             userID = data["user_id"]
-            mydb = get_db()
             mycursor = mydb.cursor()
             sql = """
                 SELECT cf.id, cf.file_name, mf.id, mf.question, mf.answer, mf.react
                 FROM chat_files cf
                 LEFT JOIN messages_file mf ON cf.id = mf.file_id
-                WHERE cf.user_id = ?
+                WHERE cf.user_id = %s
                 ORDER BY mf.id
             """
             val = [userID]
@@ -432,16 +471,15 @@ def newFile(*args, **kwargs):
     if "token" in data and "user_id" in data and "file_name" in data:
         if token_check(data["token"]):
             userID = data["user_id"]
-            mydb = get_db()
             mycursor = mydb.cursor()
-            sql = "SELECT * FROM chat_files WHERE file_name = ? AND user_id = ?"
+            sql = "SELECT * FROM chat_files WHERE file_name = %s AND user_id = %s"
             val = [data["file_name"], userID]
             mycursor.execute(sql, val)
             result = mycursor.fetchone()
             print(result)
             if(result is None):
                 mycursor = mydb.cursor()
-                sql = "INSERT INTO chat_files (user_id, file_name) VALUES (?, ?)"
+                sql = "INSERT INTO chat_files (user_id, file_name) VALUES (%s, %s)"
                 val = (userID, data["file_name"])
                 mycursor.execute(sql, val)
                 fileID = mycursor.lastrowid
@@ -466,9 +504,8 @@ def newMessageFile(*args, **kwargs):
         if token_check(data["token"]):
             print("newMessageFile IF 2 OKKKK")
             userID = data["user_id"]
-            mydb = get_db()
             mycursor = mydb.cursor()
-            sql = "SELECT * FROM chat_files WHERE file_name = ? AND user_id = ?"
+            sql = "SELECT * FROM chat_files WHERE file_name = %s AND user_id = %s"
             val = [data["file_name"], userID]
             mycursor.execute(sql, val)
             result = mycursor.fetchone()
@@ -476,7 +513,7 @@ def newMessageFile(*args, **kwargs):
             if result:
                 print("newMessageFile IF 3 OKKKK")
                 mycursor = mydb.cursor()
-                sql = "INSERT INTO messages_file (file_id, question, answer) VALUES (?, ?, ?)"
+                sql = "INSERT INTO messages_file (file_id, question, answer) VALUES (%s, %s, %s)"
                 val = (result[0], data["question"], data["answer"])
                 mycursor.execute(sql, val)
                 
@@ -504,7 +541,7 @@ def updateMessageFile(*args, **kwargs):
             message_id = data["message_id"]
             answer = data["answer"]
             mycursor = mydb.cursor()
-            sql = "UPDATE messages_file SET answer = ?, react = ? WHERE id = ?"
+            sql = "UPDATE messages_file SET answer = %s, react = %s WHERE id = %s"
             val = (answer, 0, message_id)
             
             try:
@@ -531,9 +568,8 @@ def submitReactFile(*args, **kwargs):
         if token_check(data["token"]):
             message_id = data["message_id"]
             react = data["react"]
-            mydb = get_db()
             mycursor = mydb.cursor()
-            sql = "UPDATE messages_file SET react = ? WHERE id = ?"
+            sql = "UPDATE messages_file SET react = %s WHERE id = %s"
             val = (react, message_id)
             
             try:
@@ -560,9 +596,8 @@ def deleteConversationFile(*args, **kwargs):
         if token_check(data["token"]):
             userID = data["user_id"]
             fileID = data["file_id"]
-            mydb = get_db()
             mycursor = mydb.cursor()
-            sql = "DELETE FROM chat_files WHERE id = ? AND user_id = ?"
+            sql = "DELETE FROM chat_files WHERE id = %s AND user_id = %s"
             val = [fileID, userID]
 
             print("===", fileID)
@@ -572,7 +607,7 @@ def deleteConversationFile(*args, **kwargs):
                 mydb.commit()
                 
                 mycursor = mydb.cursor()
-                sql = "DELETE FROM messages_file WHERE file_id = ?"
+                sql = "DELETE FROM messages_file WHERE file_id = %s"
                 val = [fileID]
                 
                 mycursor.execute(sql, list(val))

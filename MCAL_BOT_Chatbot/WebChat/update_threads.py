@@ -34,11 +34,12 @@ def updateLatestTitleToCookie(title:str, session:gr.State):
     print("[Web-Server]____ updateLatestTitleToCookie")
     if "title" in session:
         if title in session["title"]  or ((title == None or title == "") and len(session["title"]) > 0):  
-            print("[Web-Server]lasttitle----- ", title)
             tokenData = {
                 "title":title
             }
-            return authSecurity.create_token(tokenData) # Create a new token for this current title
+            ret = authSecurity.create_token(tokenData) # Create a new token for this current title
+            print(f"[Web-Server] updateLatestTitleToCookie:- {ret}")
+            return ret
 
     return ""
 
