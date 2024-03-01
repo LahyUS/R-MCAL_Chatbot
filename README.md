@@ -16,7 +16,7 @@ MCAL Chatbot is an AI-powered assistant designed to assist MCAL (Microcontroller
 ![Main Chat UI](Diagrams/Main_Chat_UI.png)
 
 # Documentation
-For comprehensive knowledge, please refer to Documentation.pdf
+For comprehensive knowledge, please refer to [Documentation](./Documentation.pdf)
 
 ## Installation
-For detailed instructions, please refer to Install_Guideline.md
+For detailed instructions, please refer to [Install_Guideline](./Install_Guideline.md)
