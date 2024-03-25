@@ -20,3 +20,6 @@ For comprehensive knowledge, please refer to [Documentation](./Documentation.pdf
 
 ## Installation
 For detailed instructions, please refer to [Install_Guideline](./Install_Guideline.md)
+
+## Contributing
+Contributions are welcome! If you have any ideas for improvements or new features, feel free to open an issue or submit a pull request.
